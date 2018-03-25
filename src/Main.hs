@@ -12,6 +12,9 @@ import LLVM.AST
 import LLVM.AST.Global
 import LLVM.Context
 import LLVM.AST.Type
+import LLVM.AST.Constant hiding (Add)
+import LLVM.AST.CallingConvention
+import LLVM.AST.AddrSpace
 -- import LLVM.Pretty (ppllvm)
 
 import LLVM.OrcJIT  as LLVMJIT
@@ -42,6 +45,31 @@ is provided instead.)
 -}
 
 
+addTy :: Type
+addTy = PointerType (FunctionType i64 [i64,i64] False) (AddrSpace 0)
+
+defAdd :: Definition
+defAdd = GlobalDefinition functionDefaults
+  { name = Name "add"
+  , parameters =
+      ( [ Parameter i64 (Name "a") []
+        , Parameter i64 (Name "b") [] ]
+      , False )
+  , returnType = i64
+  , basicBlocks = [body]
+  }
+  where
+    body = BasicBlock
+        (Name "entry")
+        [ Name "result" :=
+            Add False  -- no signed wrap
+                False  -- no unsigned wrap
+                (LocalReference i64 (Name "a"))
+                (LocalReference i64 (Name "b"))
+                []]
+        (Do $ Ret (Just (LocalReference i64 (Name "result"))) [])
+
+
 defMain :: Definition
 defMain = GlobalDefinition functionDefaults
   { name = Name "main_expr"
@@ -50,13 +78,25 @@ defMain = GlobalDefinition functionDefaults
   , basicBlocks = [body]
   }
   where
-    body = BasicBlock (Name "entry") [] (Do $ Ret Nothing [])
-
+    body = BasicBlock
+        (Name "entry")
+        [ Name "result" :=
+            Call
+              Nothing -- TailCallKind
+              C       -- calling convention
+              []      -- return attributes
+              (Right (ConstantOperand $ GlobalReference addTy "add")) -- fn
+              [ (ConstantOperand $ Int 64 40, [])
+              , (ConstantOperand $ Int 64 2, [])] -- args
+              [] -- function attributes
+              [] -- metadata
+        ]
+        (Do $ Ret (Just (LocalReference i64 "result")) [])
 
 testmod :: LLVM.AST.Module
 testmod = defaultModule
   { moduleName = "testmod"
-  , moduleDefinitions = [defMain]
+  , moduleDefinitions = [defAdd, defMain]
   }
 
 --------------------------------------------------------------------------------
