@@ -20,6 +20,28 @@ import LLVM.Target  as LLVMJIT
 import LLVM.Internal.ObjectFile
 --------------------------------------------------------------------------------
 
+{-
+
+`rts.c` has a minimal RTS I'm using to test the object file linking.
+It houses the `main` function.
+
+That main function calls `main_expr`, which is provided by this LLVM module.
+
+Steps to reproduce the error:
+
+(1) gcc -c -std=gnu11 rts.c
+
+(2) cabal new-repl llvm-hs183
+
+(3) > main
+
+
+(The path for "rts.o" is not setup properly for `new-exec`. It works if an absolute path
+is provided instead.)
+
+-}
+
+
 defMain :: Definition
 defMain = GlobalDefinition functionDefaults
   { name = Name "main_expr"
@@ -65,6 +87,7 @@ eagerJIT amod =
         withObjectLinkingLayer $ \objectLayer ->
           withIRCompileLayer objectLayer tm $ \compileLayer -> do
             buf <- createObjectFile "rts.o"
+            -- NOTE: This causes the memory corruption error
             _ <- addObjectFile objectLayer buf (SymbolResolver (resolver compileLayer) nullResolver)
             asm <- moduleLLVMAssembly mod
             BS.putStrLn asm
